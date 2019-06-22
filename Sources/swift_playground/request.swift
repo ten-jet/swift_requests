@@ -8,6 +8,20 @@ extension Dictionary {
     }
 }
 
+extension URLRequest {
+    init(type: String, url: URL, data:[String:Any] = [:], headers:[String:String] = [:]) {
+        self.init(url: url)
+        httpMethod = type
+
+        for (key, value) in headers { self.setValue(value, forHTTPHeaderField: key) }
+
+        if headers["Accept"] == nil { setValue("application/json", forHTTPHeaderField: "Accept") }
+        if headers["Content-Type"] == nil { setValue("application/json", forHTTPHeaderField: "Content-Type") }
+
+        if !data.isEmpty { httpBody = try? JSONSerialization.data(withJSONObject: data) }
+    }
+}
+
 class Request {
     var session:URLSession
 
@@ -19,93 +33,33 @@ class Request {
         self.session = URLSession.init(configuration: config)
     }
 
+    @discardableResult
     func post(_ urlStr:String, _ data:[String:Any], headers:[String:String] = [:], onComplete:((Response) -> Void)? = nil) -> Response {
-        guard let url = URL(string: urlStr) else {
-            let resp = Response(error: Response.RequestError(code: 0, type: .urlError))
-
-            if onComplete != nil { onComplete!(resp) }
-            return resp
-        }
-
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: data) as! Data else {
-            let resp = Response(error: Response.RequestError(code: 0, type: .jsonParseError))
-
-            if onComplete != nil { onComplete!(resp) }
-            return resp
-        }
-
-        var request = URLRequest(url: url)
-        self.setHeaders(request: &request, headers: headers)
-
-        request.httpMethod = "POST"
-        request.httpBody = jsonData
-
-        return self.request(with: request, onComplete: onComplete)
+        return self.request("POST", urlStr, data: data, headers: headers, onComplete: onComplete)
     }
 
+    @discardableResult
     func patch(_ urlStr:String, _ data:[String:Any], headers:[String:String] = [:], onComplete:((Response) -> Void)? = nil) -> Response {
-        guard let url = URL(string: urlStr) else {
-            let resp = Response(error: Response.RequestError(code: 0, type: .urlError))
-
-            if onComplete != nil { onComplete!(resp) }
-            return resp
-        }
-
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: data) as! Data else {
-            let resp = Response(error: Response.RequestError(code: 0, type: .jsonParseError))
-
-            if onComplete != nil { onComplete!(resp) }
-            return resp
-        }
-
-        var request = URLRequest(url: url)
-        self.setHeaders(request: &request, headers: headers)
-
-        request.httpMethod = "PATCH"
-        request.httpBody = jsonData
-
-        return self.request(with: request, onComplete: onComplete)
+        return self.request("PATCH", urlStr, data: data, headers: headers, onComplete: onComplete)
     }
 
+    @discardableResult
     func put(_ urlStr:String, _ data:[String:Any], headers:[String:String] = [:], onComplete:((Response) -> Void)? = nil) -> Response {
-        guard let url = URL(string: urlStr) else {
-            let resp = Response(error: Response.RequestError(code: 0, type: .urlError))
-
-            if onComplete != nil { onComplete!(resp) }
-            return resp
-        }
-
-        guard let jsonData = try? JSONSerialization.data(withJSONObject: data) as! Data else {
-            let resp = Response(error: Response.RequestError(code: 0, type: .jsonParseError))
-
-            if onComplete != nil { onComplete!(resp) }
-            return resp
-        }
-
-        var request = URLRequest(url: url)
-        self.setHeaders(request: &request, headers: headers)
-
-        request.httpMethod = "PUT"
-        request.httpBody = jsonData
-
-        return self.request(with: request, onComplete: onComplete)
+        return self.request("PUT", urlStr, data: data, headers: headers, onComplete: onComplete)
     }
 
+    @discardableResult
     func get(_ urlStr:String, params:[String:Any] = [:], headers:[String:String] = [:], onComplete:((Response) -> Void)? = nil) -> Response {
-        guard let url = URL(string: (params.isEmpty ? urlStr : "\(urlStr)?\(params.queryString)")) else {
-            let resp = Response(error: Response.RequestError(code: 0, type: .urlError))
-
-            if onComplete != nil { onComplete!(resp) }
-            return resp
-        }
-
-        var request = URLRequest(url: url)
-        self.setHeaders(request: &request, headers: headers)
-
-        return self.request(with: request, onComplete: onComplete)
+        return self.request("GET", urlStr, params: params, headers: headers, onComplete: onComplete)
     }
 
+    @discardableResult
     func delete(_ urlStr:String, params:[String:Any] = [:], headers:[String:String] = [:], onComplete:((Response) -> Void)? = nil) -> Response {
+        return self.request("DELETE", urlStr, params: params, headers: headers, onComplete: onComplete)
+    }
+
+    @discardableResult
+    func request(_ type: String, _ urlStr:String, data:[String:Any] = [:], params:[String:Any] = [:], headers:[String:String] = [:], onComplete:((Response) -> Void)? = nil) -> Response {
         guard let url = URL(string: (params.isEmpty ? urlStr : "\(urlStr)?\(params.queryString)")) else {
             let resp = Response(error: Response.RequestError(code: 0, type: .urlError))
 
@@ -113,24 +67,9 @@ class Request {
             return resp
         }
 
-        var request = URLRequest(url: url)
-        self.setHeaders(request: &request, headers: headers)
-
-        request.httpMethod = "DELETE"
-
-        return self.request(with: request, onComplete: onComplete)
-    }
-
-    private func setHeaders(request: inout URLRequest, headers:[String:String] = [:]) {
-        for (key, value) in headers { request.setValue(value, forHTTPHeaderField: key) }
-
-        if headers["Accept"] == nil { request.setValue("application/json", forHTTPHeaderField: "Accept") }
-        if headers["Content-Type"] == nil { request.setValue("application/json", forHTTPHeaderField: "Content-Type") }
-    }
-
-    private func request(with request:URLRequest, onComplete:((Response) -> Void)? = nil) -> Response {
         var respObj:Response?
 
+        let request = URLRequest(type: type, url: url, data: data, headers: headers)
         let semaphore:DispatchSemaphore? = (onComplete == nil ? DispatchSemaphore(value: 0) : nil)
         self.session.dataTask(with:request) { data, resp, err in
             guard let data = data, let response = resp as? HTTPURLResponse, err == nil else {
@@ -141,9 +80,12 @@ class Request {
             }
 
             let respBody = String(data: data, encoding: .utf8) ?? "Invalid response returned"
-            let err:Error? = ((200...299) ~= response.statusCode ? nil : Response.RequestError(code: response.statusCode, body: respBody))
-
-            respObj = Response(status: response.statusCode, body: respBody, error: err)
+            respObj = Response(
+                    status: response.statusCode,
+                    body: respBody,
+                    headers: response.allHeaderFields as! [String:Any],
+                    error: ((200...299) ~= response.statusCode ? nil : Response.RequestError(code: response.statusCode, body: respBody))
+            )
             if onComplete != nil { onComplete!(respObj!) }
             if semaphore != nil { semaphore!.signal() }
         }.resume()
@@ -156,38 +98,24 @@ class Request {
         var statusCode:Int
         var body:String?
         var error:Error?
+        var json:Any?
+        var headers:[String:Any]
 
-        init(status code:Int = 0, body msg:String? = nil, error err:Error? = nil) {
+        init(status code:Int = 0, body msg:String? = nil, headers:[String:Any] = [:], error err:Error? = nil) {
             self.statusCode = code
             self.body = msg
             self.error = err
+            self.headers = headers
+
+            if self.body != nil { self.json = try? JSONSerialization.jsonObject(with: String(describing: self.body ?? "").data(using: .utf8)!) }
         }
 
-        func json() -> Any {
-            return ((self.body ?? "{}").starts(with: "{") ? jsonObject() : jsonArray())
+        func asJSON() -> [String:Any] {
+            return [ "responseCode": self.statusCode, "body": self.body ?? "", "headers": self.headers, "error": self.error ?? "" ]
         }
 
         func display() {
-            var output = "Response Code: \(self.statusCode)\nResponse Str: \(self.body ?? "")\nResponse JSON: \(self.json())\n"
-
-            if self.error != nil {
-                if String(describing: type(of: self.error!)) == "RequestError" {
-                    let err:RequestError = self.error as! RequestError
-                    output += "Error: \(String(describing: err.code)) => \(String(describing: err.body))\n"
-                } else {
-                    output += "Error: \(String(describing: self.error))\n"
-                }
-            }
-
-            print(output)
-        }
-
-        private func jsonObject() -> [String:Any] {
-            return (try? JSONSerialization.jsonObject(with: String(describing: self.body ?? "{\"msg\":\"Invalid JSON\"}").data(using: .utf8) as! Data) as! [String:Any]) ?? [:]
-        }
-
-        private func jsonArray() -> [[String:Any]] {
-            return (try? JSONSerialization.jsonObject(with: String(describing: self.body ?? "{\"msg\":\"Invalid JSON\"}").data(using: .utf8) as! Data) as! [[String:Any]]) ?? []
+            print("\(self.asJSON() as AnyObject)\n")
         }
 
         struct RequestError:Error {
@@ -206,13 +134,11 @@ class Request {
                 case jsonParseError
                 case unknownError
                 case invalidResponse(code: Int)
-
                 case badRequest(msg: String)
                 case unauthorized(msg: String)
                 case notFound(msg: String)
                 case forbidden(msg: String)
                 case unprocessableEntity(msg: String)
-
                 case internalServer
                 case badGateway
                 case serviceUnavailable

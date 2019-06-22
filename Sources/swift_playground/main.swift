@@ -4,7 +4,7 @@ func asyncTest(urls:[String], params:[String:Any] = [:]) {
     let request = Request()
     for url in urls {
         let semaphore = DispatchSemaphore(value: 0)
-        _ = request.get(url, params: params) { resp in
+        request.get(url, params: params) { resp in
             resp.display()
             semaphore.signal()
         }
@@ -17,19 +17,19 @@ func syncTest(urls:[String], params:[String:Any] = [:]) {
     for url in urls { request.get(url, params: params).display() }
 }
 
-let request = Request()
-
-print("Test POST")
-request.post("https://httpstat.us/200", ["test": true]).display()
-
-print("Test PATCH")
-request.patch("https://httpstat.us/200", ["test": true]).display()
-
-print("Test PUT")
-request.put("https://httpstat.us/200", ["test": true]).display()
-
-print("Test DELETE")
-request.delete("https://httpstat.us/200", params: ["test": true]).display()
+//let request = Request()
+//
+//print("Test POST")
+//request.post("https://httpstat.us/200", ["test": true]).display()
+//
+//print("Test PATCH")
+//request.patch("https://httpstat.us/200", ["test": true]).display()
+//
+//print("Test PUT")
+//request.put("https://httpstat.us/200", ["test": true]).display()
+//
+//print("Test DELETE")
+//request.delete("https://httpstat.us/200", params: ["test": true]).display()
 
 let urls:[String] = [
     "https://httpstat.us/200",
